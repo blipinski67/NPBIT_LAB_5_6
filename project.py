@@ -23,6 +23,22 @@ def load_data(file_path):
         print(f"Błąd: Format {ext} nie jest jeszcze obsługiwany przy wczytywaniu.")
         sys.exit(1)
 
+def save_data(data, file_path):
+    _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
+
+    if ext == '.json':
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4)
+            print(f"Pomyślnie zapisano dane do pliku: {file_path}")
+        except Exception as e:
+            print(f"Błąd podczas zapisu do pliku: {e}")
+            sys.exit(1)
+    else:
+        print(f"Błąd: Format {ext} nie jest jeszcze obsługiwany przy zapisie.")
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(description="Program do konwersji danych między formatami .xml, .json, .yml/.yaml")
     parser.add_argument("input_file", help="Ścieżka do pliku wejściowego")
@@ -39,7 +55,7 @@ def main():
         sys.exit(1)
         
     data = load_data(args.input_file)
-    print("Dane w pamięci:", data)
+    save_data(data, args.output_file)
 
 if __name__ == "__main__":
     main()
