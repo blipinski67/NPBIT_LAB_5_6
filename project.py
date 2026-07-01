@@ -6,6 +6,7 @@ import yaml
 import xmltodict
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, 
                              QLabel, QFileDialog, QMessageBox)
+from PyQt6.QtCore import QThread, pyqtSignal
 
 def load_data(file_path):
     _, ext = os.path.splitext(file_path)
@@ -52,7 +53,29 @@ def save_data(data, file_path):
         raise ValueError(f"Format {ext} nie jest obsługiwany przy zapisie.")
 
 
-# --- Interfejs Graficzny (UI) ---
+#Wielowątkowość dla interfejsu
+class ConversionWorker(QThread):
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+    success = pyqtSignal(str)
+
+    def __init__(self, input_path, output_path):
+        super().__init__()
+        self.input_path = input_path
+        self.output_path = output_path
+
+    def run(self):
+        try:
+            data = load_data(self.input_path)
+            save_data(data, self.output_path)
+            self.success.emit("Konwersja zakończona pomyślnie!")
+        except Exception as e:
+            self.error.emit(str(e))
+        finally:
+            self.finished.emit()
+
+
+# Interfejs Graficzny
 class ConverterApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -76,7 +99,7 @@ class ConverterApp(QWidget):
         self.btn_output.clicked.connect(self.select_output)
         layout.addWidget(self.btn_output)
 
-        self.btn_convert = QPushButton("3. Konwertuj!")
+        self.btn_convert = QPushButton("3. Konwertuj (W tle)!")
         self.btn_convert.clicked.connect(self.run_conversion)
         self.btn_convert.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         layout.addWidget(self.btn_convert)
@@ -100,12 +123,25 @@ class ConverterApp(QWidget):
             QMessageBox.warning(self, "Błąd", "Wybierz oba pliki przed konwersją!")
             return
 
-        try:
-            data = load_data(self.input_path)
-            save_data(data, self.output_path)
-            QMessageBox.information(self, "Sukces", "Konwersja zakończona pomyślnie!")
-        except Exception as e:
-            QMessageBox.critical(self, "Błąd", str(e))
+        # Uruchomienie wątku roboczego
+        self.btn_convert.setEnabled(False)
+        self.btn_convert.setText("Przetwarzanie...")
+        
+        self.worker = ConversionWorker(self.input_path, self.output_path)
+        self.worker.success.connect(self.on_success)
+        self.worker.error.connect(self.on_error)
+        self.worker.finished.connect(self.on_finished)
+        self.worker.start()
+
+    def on_success(self, message):
+        QMessageBox.information(self, "Sukces", message)
+
+    def on_error(self, message):
+        QMessageBox.critical(self, "Błąd", message)
+
+    def on_finished(self):
+        self.btn_convert.setEnabled(True)
+        self.btn_convert.setText("3. Konwertuj (W tle)!")
 
 
 def main():
