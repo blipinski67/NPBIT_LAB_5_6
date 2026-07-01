@@ -3,6 +3,9 @@ import sys
 import os
 import json
 import yaml
+import xmltodict
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QPushButton, 
+                             QLabel, QFileDialog, QMessageBox)
 
 def load_data(file_path):
     _, ext = os.path.splitext(file_path)
@@ -11,79 +14,123 @@ def load_data(file_path):
     if ext == '.json':
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            print("Pomyślnie wczytano plik JSON.")
-            return data
-        except json.JSONDecodeError as e:
-            print(f"Błąd: Niepoprawna składnia pliku JSON w {file_path}. Szczegóły: {e}")
-            sys.exit(1)
+                return json.load(f)
         except Exception as e:
-            print(f"Błąd podczas wczytywania pliku: {e}")
-            sys.exit(1)
-            
+            raise ValueError(f"Błąd pliku JSON: {e}")
     elif ext in ['.yml', '.yaml']:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-            print("Pomyślnie wczytano plik YAML.")
-            return data
-        except yaml.YAMLError as e:
-            print(f"Błąd: Niepoprawna składnia pliku YAML w {file_path}. Szczegóły: {e}")
-            sys.exit(1)
+                return yaml.safe_load(f)
         except Exception as e:
-            print(f"Błąd podczas wczytywania pliku: {e}")
-            sys.exit(1)
-            
+            raise ValueError(f"Błąd pliku YAML: {e}")
+    elif ext == '.xml':
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return xmltodict.parse(f.read())
+        except Exception as e:
+            raise ValueError(f"Błąd pliku XML: {e}")
     else:
-        print(f"Błąd: Format {ext} nie jest jeszcze obsługiwany przy wczytywaniu.")
-        sys.exit(1)
+        raise ValueError(f"Format {ext} nie jest obsługiwany.")
 
 def save_data(data, file_path):
     _, ext = os.path.splitext(file_path)
     ext = ext.lower()
 
     if ext == '.json':
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
-            print(f"Pomyślnie zapisano dane do pliku: {file_path}")
-        except Exception as e:
-            print(f"Błąd podczas zapisu do pliku: {e}")
-            sys.exit(1)
-            
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
     elif ext in ['.yml', '.yaml']:
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
-            print(f"Pomyślnie zapisano dane do pliku: {file_path}")
-        except Exception as e:
-            print(f"Błąd podczas zapisu do pliku: {e}")
-            sys.exit(1)
-            
+        with open(file_path, 'w', encoding='utf-8') as f:
+            yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    elif ext == '.xml':
+        if not isinstance(data, dict) or len(data) != 1:
+            data = {'root': data}
+        xml_data = xmltodict.unparse(data, pretty=True)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(xml_data)
     else:
-        print(f"Błąd: Format {ext} nie jest jeszcze obsługiwany przy zapisie.")
-        sys.exit(1)
+        raise ValueError(f"Format {ext} nie jest obsługiwany przy zapisie.")
+
+
+# --- Interfejs Graficzny (UI) ---
+class ConverterApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Konwerter Danych IT")
+        self.resize(400, 200)
+        self.input_path = None
+        self.output_path = None
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+
+        self.label_info = QLabel("Wybierz pliki do konwersji (.json, .yml, .xml)")
+        layout.addWidget(self.label_info)
+
+        self.btn_input = QPushButton("1. Wybierz plik wejściowy")
+        self.btn_input.clicked.connect(self.select_input)
+        layout.addWidget(self.btn_input)
+
+        self.btn_output = QPushButton("2. Wybierz miejsce zapisu")
+        self.btn_output.clicked.connect(self.select_output)
+        layout.addWidget(self.btn_output)
+
+        self.btn_convert = QPushButton("3. Konwertuj!")
+        self.btn_convert.clicked.connect(self.run_conversion)
+        self.btn_convert.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        layout.addWidget(self.btn_convert)
+
+        self.setLayout(layout)
+
+    def select_input(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Wybierz plik wejściowy")
+        if file_path:
+            self.input_path = file_path
+            self.btn_input.setText(f"Wejście: {os.path.basename(file_path)}")
+
+    def select_output(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Wybierz miejsce zapisu")
+        if file_path:
+            self.output_path = file_path
+            self.btn_output.setText(f"Wyjście: {os.path.basename(file_path)}")
+
+    def run_conversion(self):
+        if not self.input_path or not self.output_path:
+            QMessageBox.warning(self, "Błąd", "Wybierz oba pliki przed konwersją!")
+            return
+
+        try:
+            data = load_data(self.input_path)
+            save_data(data, self.output_path)
+            QMessageBox.information(self, "Sukces", "Konwersja zakończona pomyślnie!")
+        except Exception as e:
+            QMessageBox.critical(self, "Błąd", str(e))
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Program do konwersji danych między formatami .xml, .json, .yml/.yaml")
-    parser.add_argument("input_file", help="Ścieżka do pliku wejściowego")
-    parser.add_argument("output_file", help="Ścieżka do pliku wyjściowego")
-    
-    try:
+    if len(sys.argv) > 1:
+        parser = argparse.ArgumentParser(description="Program do konwersji danych")
+        parser.add_argument("input_file", help="Ścieżka do pliku wejściowego")
+        parser.add_argument("output_file", help="Ścieżka do pliku wyjściowego")
         args = parser.parse_args()
-    except SystemExit:
-        print("Błąd: Nieprawidłowe argumenty. Sposób użycia: project.py pathFile1.x pathFile2.y")
-        sys.exit(1)
 
-    if not os.path.isfile(args.input_file):
-        print(f"Błąd: Plik wejściowy '{args.input_file}' nie istnieje!")
-        sys.exit(1)
-        
-    # Wczytywanie danych z pliku wejściowego
-    data = load_data(args.input_file)
-    
-    # Zapisywanie danych do pliku wyjściowego
-    save_data(data, args.output_file)
+        if not os.path.isfile(args.input_file):
+            print(f"Błąd: Plik '{args.input_file}' nie istnieje!")
+            sys.exit(1)
+            
+        try:
+            data = load_data(args.input_file)
+            save_data(data, args.output_file)
+            print("Konwersja z konsoli zakończona pomyślnie.")
+        except Exception as e:
+            print(e)
+            sys.exit(1)
+    else:
+        app = QApplication(sys.argv)
+        window = ConverterApp()
+        window.show()
+        sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
