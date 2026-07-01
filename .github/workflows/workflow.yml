@@ -1,0 +1,35 @@
+name: Build Project to EXE
+
+on:
+  schedule:
+    - cron: '0 12 * * 1'
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latesty)
+    
+    steps:
+    - name: Pobranie kodu z repozytorium
+      uses: actions/checkout@v3
+      
+    - name: Ustawienie środowiska Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Instalacja potrzebnych komponentow
+      shell: powershell
+      run: .\installResources.ps1
+      
+    - name: Generowanie pliku .exe z projektu
+      shell: powershell
+      run: pyinstaller.exe --onefile --noconsole project.py
+      
+    - name: Przesłanie utworzonego pliku .exe na repozytorium github
+      uses: actions/upload-artifact@v3
+      with:
+        name: Gotowy_Program
+        path: dist/project.exe
